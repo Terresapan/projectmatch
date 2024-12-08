@@ -4,6 +4,7 @@ from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 import os
+import pandas as pd
 
 # Set API keys
 os.environ["OPENAI_API_KEY"] = st.secrets["general"]["OPENAI_API_KEY"]
@@ -19,26 +20,55 @@ def get_embeddings():
 def load_data():
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        return conn.read(worksheet="Ideas", ttl="10m", usecols=[0, 1, 2], nrows=50)
+        df = conn.read(worksheet="Ideas", ttl="10m", usecols=[0, 1, 2], nrows=210)
+        
+        # Debug: Print DataFrame information
+        # st.write("DataFrame Debug:")
+        # st.write("DataFrame shape:", df.shape)
+        # st.write("Columns:", df.columns)
+        # st.write("First few rows:")
+        # st.write(df.head())
+        
+        return df
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return None
 
 # Create vector store
 @st.cache_resource
-def create_vector_store(_embeddings, df):  # Note the leading underscore
-    if df is None:
+def create_vector_store(_embeddings, df):
+    if df is None or df.empty:
+        st.error("DataFrame is None or empty")
         return None
     
-    text_data = [
-        f"Idea: {idea}; Category: {category}; How: {how}"
-        for idea, category, how in zip(df['Idea'], df['Category'], df['How'])
-    ]
-    
     try:
+        # Ensure column names are correct
+        df.columns = ['Idea', 'Category', 'How']
+        
+        # Debug: Check data before creating embeddings
+        # st.write("Data before embedding:")
+        # st.write(df.head())
+        
+        text_data = [
+            f"Idea: {idea}; Category: {category}; How: {how}"
+            for idea, category, how in zip(df['Idea'], df['Category'], df['How'])
+        ]
+        
+        # Debug: Check text data
+        # st.write("Text Data:")
+        # st.write(text_data[:5])  # Print first 5 entries
+        
+        # Create metadata list
+        metadatas = df.to_dict('records')
+        
+        # Debug: Check metadata
+        # st.write("Metadata (first few):")
+        # st.write(metadatas[:5])
+        
         vector_store = FAISS.from_texts(
             texts=text_data, 
-            embedding=_embeddings  # Use the underscore-prefixed parameter
+            embedding=_embeddings,
+            metadatas=metadatas
         )
         return vector_store
     except Exception as e:
@@ -54,8 +84,8 @@ def main():
     
     # Load data
     df = load_data()
-    if df is None:
-        st.error("Could not load data")
+    if df is None or df.empty:
+        st.error("Could not load data or data is empty")
         return
     
     # Create vector store
@@ -70,8 +100,8 @@ def main():
     if user_query:
         try:
             # Search in vector store
-            results = vector_store.similarity_search(user_query, k=3)
-            
+            results = vector_store.similarity_search(user_query, k=5)
+                
             # Initialize LLM
             llm = ChatGroq(
                 model="llama-3.3-70b-versatile", 
@@ -93,6 +123,12 @@ def main():
                 st.write(response.content)
             else:
                 st.write("No relevant results found.")
+
+            # Debug: Print results
+            # st.write("Search Results Debug:")
+            for result in results:
+                # st.write("Result Text:", result.page_content)
+                st.write("Result Metadata:", result.metadata)
         
         except Exception as e:
             st.error(f"Error processing query: {e}")
