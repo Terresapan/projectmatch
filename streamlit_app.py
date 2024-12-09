@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 import re
-from io import BytesIO
 
 # Langchain and AI libraries
 from langchain_groq import ChatGroq
@@ -11,13 +10,16 @@ from langchain_openai import OpenAIEmbeddings
 # File processing libraries
 import PyPDF2
 
+# --- UI Enhancements ---
+st.set_page_config(page_title="Project-Consultant Matcher", page_icon="🤝")
+
 # Attempt to import python-docx, but provide fallback
 try:
     import docx
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
-    st.warning("python-docx library not installed. Word document support will be limited.")
+    st.warning("⚠️ python-docx library not installed. Word document support will be limited.")
 
 # Set API keys from Streamlit secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["general"]["OPENAI_API_KEY"]
@@ -33,13 +35,13 @@ def extract_text_from_pdf(file):
             text += page.extract_text() or ""
         return text
     except Exception as e:
-        st.error(f"Error reading PDF: {e}")
+        st.error(f"❌ Error reading PDF: {e}")
         return ""
 
 def extract_text_from_docx(file):
     """Extract text from a Word document"""
     if not HAS_DOCX:
-        st.warning("Cannot process Word documents. Please install python-docx.")
+        st.warning("⚠️ Cannot process Word documents. Please install python-docx.")
         return ""
     
     try:
@@ -47,7 +49,7 @@ def extract_text_from_docx(file):
         text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
         return text
     except Exception as e:
-        st.error(f"Error reading DOCX: {e}")
+        st.error(f"❌ Error reading DOCX: {e}")
         return ""
 
 def extract_text_from_txt(file):
@@ -55,7 +57,7 @@ def extract_text_from_txt(file):
     try:
         return file.read().decode('utf-8')
     except Exception as e:
-        st.error(f"Error reading text file: {e}")
+        st.error(f"❌ Error reading text file: {e}")
         return ""
 
 # Initialize embeddings
@@ -72,7 +74,7 @@ def load_consultant_data():
         df = conn.read(worksheet="Database", ttl="10m", usecols=[0, 1, 2, 3, 4, 5], nrows=15)
         return df
     except Exception as e:
-        st.error(f"Error loading consultant data: {e}")
+        st.error(f"❌ Error loading consultant data: {e}")
         return None
 
 # Project summary function using AI
@@ -94,7 +96,7 @@ def generate_project_summary(text):
     
     # Prompt for extracting project details
     prompt = f"""Extract and structure the following information from the project document:
-    1. Project Name
+    1. Project Name: Create one according to the context if not given
     2. Project Scope
     3. Client Expectations
     4. Skills Needed
@@ -108,14 +110,14 @@ def generate_project_summary(text):
         response = llm.invoke(prompt)
         return response.content
     except Exception as e:
-        st.error(f"Error generating project summary: {e}")
+        st.error(f"❌ Error generating project summary: {e}")
         return "Unable to generate summary."
 
 # Create vector store for consultants
 @st.cache_resource
 def create_consultant_vector_store(_embeddings, df):
     if df is None or df.empty:
-        st.error("Consultant DataFrame is None or empty")
+        st.error("❌ Consultant DataFrame is None or empty")
         return None
     
     try:
@@ -141,7 +143,7 @@ def create_consultant_vector_store(_embeddings, df):
         )
         return vector_store
     except Exception as e:
-        st.error(f"Error creating consultant vector store: {e}")
+        st.error(f"❌ Error creating consultant vector store: {e}")
         return None
 
 # Analyze consultant match with AI
@@ -163,8 +165,8 @@ Consultant Details:
 {consultant_details}
 
 Provide a detailed assessment that includes:
-1. Strengths of this consultant for the project
-2. Potential limitations or challenges
+1. Strengths of this consultant for the project within 100 words
+2. Potential limitations or challenges within 100 words
 3. Overall suitability rating (out of 10)
 
 Your analysis should be constructive, highlighting both positive aspects and areas of potential concern."""
@@ -173,7 +175,7 @@ Your analysis should be constructive, highlighting both positive aspects and are
         response = llm.invoke(prompt)
         return response.content
     except Exception as e:
-        st.error(f"Error analyzing consultant match: {e}")
+        st.error(f"❌ Error analyzing consultant match: {e}")
         return "Unable to generate detailed match analysis."
 
 # Find best consultant matches
@@ -208,15 +210,15 @@ def find_best_consultant_matches(vector_store, project_summary, top_k=3):
         
         return matches
     except Exception as e:
-        st.error(f"Error finding consultant matches: {e}")
+        st.error(f"❌ Error finding consultant matches: {e}")
         return []
 
 # Main Streamlit app
 def main():
-    st.title("Project-Consultant Matching Platform")
+    st.title("🤝 Project-Consultant Matcher")
     
-    # Input method selection
-    input_method = st.radio("Choose Input Method", ["File Upload", "Text Query"])
+    # Input method selection using tags
+    input_method = st.radio("Choose Input Method", ["📂 File Upload", "✍️ Text Query"])
     
     # Initialize session state variables
     if 'project_summary' not in st.session_state:
@@ -225,7 +227,7 @@ def main():
         st.session_state.matches = None
     
     # File upload section
-    if input_method == "File Upload":
+    if input_method == "📂 File Upload":
         uploaded_file = st.file_uploader("Upload Project Document", type=["pdf", "docx", "txt"])
         
         if uploaded_file is not None:
@@ -236,12 +238,12 @@ def main():
                 if HAS_DOCX:
                     file_text = extract_text_from_docx(uploaded_file)
                 else:
-                    st.error("Cannot process Word documents. Please install python-docx.")
+                    st.error("❌ Cannot process Word documents. Please install python-docx.")
                     return
             elif uploaded_file.type == "text/plain":
                 file_text = extract_text_from_txt(uploaded_file)
             else:
-                st.error("Unsupported file type")
+                st.error("❌ Unsupported file type")
                 return
             
             # Store file text for matching
@@ -256,16 +258,16 @@ def main():
             placeholder="Describe your project, required skills, and expectations..."
         )
     
-    # Match button
-    match_button = st.button("Find Best Consultants")
+    # Match button with improved styling
+    match_button = st.button("✨ Find Best Consultants")
     
     # Matching process
     if match_button and st.session_state.file_text:
         # Display file processing progress
-        with st.spinner('Processing project document...'):
+        with st.spinner('⚙️ Processing project document...'):
             # Generate project summary
             st.session_state.project_summary = generate_project_summary(st.session_state.file_text)
-            st.subheader("Project Summary")
+            st.subheader("📝 Project Summary")
             st.write(st.session_state.project_summary)
         
         # Get embeddings and consultant data
@@ -278,13 +280,13 @@ def main():
             
             # Find best matches
             if vector_store:
-                with st.spinner('Finding best consultant matches...'):
+                with st.spinner('🔍 Finding best consultant matches...'):
                     st.session_state.matches = find_best_consultant_matches(vector_store, st.session_state.project_summary)
                 
-                st.subheader("Best Matching Consultants")
+                st.subheader("🎯 Best Matching Consultants")
                 if st.session_state.matches:
                     for i, consultant in enumerate(st.session_state.matches, 1):
-                        st.markdown(f"### Consultant {i}")
+                        st.markdown(f"### 👨‍💼 Consultant {i}")
                         for key, value in consultant.items():
                             # Special handling for match analysis to make it more readable
                             if key == "Match Analysis":
@@ -294,11 +296,11 @@ def main():
                                 st.write(f"**{key}:** {value}")
                         st.write("---")
                 else:
-                    st.write("No matching consultants found.")
+                    st.write("😔 No matching consultants found.")
             else:
-                st.error("Could not create consultant vector store")
+                st.error("❌ Could not create consultant vector store")
         else:
-            st.error("Could not load consultant data")
+            st.error("❌ Could not load consultant data")
 
 if __name__ == "__main__":
     main()
