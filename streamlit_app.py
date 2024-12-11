@@ -30,9 +30,7 @@ def extract_text_from_pdf(file):
     """Extract text from a PDF file"""
     try:
         pdf_reader = PyPDF2.PdfReader(file)
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() or ""
+        text = "".join([page.extract_text() or "" for page in pdf_reader.pages])
         return text
     except Exception as e:
         st.error(f"❌ Error reading PDF: {e}")
@@ -43,7 +41,6 @@ def extract_text_from_docx(file):
     if not HAS_DOCX:
         st.warning("⚠️ Cannot process Word documents. Please install python-docx.")
         return ""
-    
     try:
         doc = docx.Document(file)
         text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
@@ -80,21 +77,15 @@ def load_consultant_data():
 # Project summary function using AI
 def generate_project_summary(text):
     """Generate structured project summary using AI"""
-    # Remove excessive whitespace and newlines
     text = re.sub(r'\s+', ' ', text).strip()
-    
-    # Truncate text if it's too long to prevent context overflow
     max_length = 10000
     if len(text) > max_length:
         text = text[:max_length]
-    
     llm = ChatGroq(
         model="llama-3.3-70b-versatile", 
         temperature=0.2,
         api_key=os.environ["GROQ_API_KEY"]
     )
-    
-    # Prompt for extracting project details
     prompt = f"""Extract and structure the following information from the project document:
     1. Project Name: Create one according to the context if not given
     2. Project Scope
@@ -105,7 +96,6 @@ def generate_project_summary(text):
     {text}
 
     Provide the output in a clear, concise format. If any information is not clearly mentioned, use 'Not Specified' or make a reasonable inference based on the context."""
-
     try:
         response = llm.invoke(prompt)
         return response.content
@@ -119,23 +109,15 @@ def create_consultant_vector_store(_embeddings, df):
     if df is None or df.empty:
         st.error("❌ Consultant DataFrame is None or empty")
         return None
-    
     try:
-        # Ensure column names are correct
         df.columns = ['Name', 'Age', 'Education', 'Domain', 'Bio', 'Availability']
-        
-        # Create text representations of consultants
         text_data = [
             f"Name: {name}; Age: {age}; Education: {education}; Domain: {domain}; Bio: {bio}; Availability: {availability}"
             for name, age, education, domain, bio, availability in zip(
                 df['Name'], df['Age'], df['Education'], df['Domain'], df['Bio'], df['Availability']
             )
         ]
-        
-        # Create metadata list
         metadatas = df.to_dict('records')
-        
-        # Create vector store
         vector_store = FAISS.from_texts(
             texts=text_data, 
             embedding=_embeddings,
@@ -154,8 +136,6 @@ def analyze_consultant_match(project_summary, consultant_details):
         temperature=0.2,
         api_key=os.environ["GROQ_API_KEY"]
     )
-    
-    # Detailed prompt to assess consultant fit
     prompt = f"""Analyze the match between this project and the consultant:
 
 Project Summary:
@@ -170,7 +150,6 @@ Provide a detailed assessment that includes:
 3. Overall suitability rating (out of 10)
 
 Your analysis should be constructive, highlighting both positive aspects and areas of potential concern."""
-
     try:
         response = llm.invoke(prompt)
         return response.content
@@ -183,21 +162,14 @@ def find_best_consultant_matches(vector_store, project_summary, top_k=3):
     """Find the best consultant matches based on project summary"""
     if not vector_store:
         return []
-    
     try:
-        # Search in consultant vector store
         results = vector_store.similarity_search(project_summary, k=top_k)
-        
-        # Format results with match analysis
         matches = []
         for result in results:
             consultant_details = "\n".join([
                 f"{key}: {value}" for key, value in result.metadata.items()
             ])
-            
-            # Generate match analysis
             match_analysis = analyze_consultant_match(project_summary, consultant_details)
-            
             matches.append({
                 "Name": result.metadata.get('Name', 'N/A'),
                 "Age": result.metadata.get('Age', 'N/A'),
@@ -207,7 +179,6 @@ def find_best_consultant_matches(vector_store, project_summary, top_k=3):
                 "Availability": result.metadata.get('Availability', 'N/A'),
                 "Match Analysis": match_analysis
             })
-        
         return matches
     except Exception as e:
         st.error(f"❌ Error finding consultant matches: {e}")
@@ -216,22 +187,16 @@ def find_best_consultant_matches(vector_store, project_summary, top_k=3):
 # Main Streamlit app
 def main():
     st.title("🤝 Project-Consultant Matcher")
-    
-    # Input method selection using tags
-    input_method = st.radio("Choose Input Method", ["📂 File Upload", "✍️ Text Query"])
-    
-    # Initialize session state variables
+    input_method = st.radio("Choose Input Method", ["📂 File Upload", "✍️ Text Query"], horizontal=True)
     if 'project_summary' not in st.session_state:
         st.session_state.project_summary = None
     if 'matches' not in st.session_state:
         st.session_state.matches = None
-    
-    # File upload section
+
     if input_method == "📂 File Upload":
         uploaded_file = st.file_uploader("Upload Project Document", type=["pdf", "docx", "txt"])
-        
         if uploaded_file is not None:
-            # Process the uploaded file
+            file_text = ""
             if uploaded_file.type == "application/pdf":
                 file_text = extract_text_from_pdf(uploaded_file)
             elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -245,50 +210,31 @@ def main():
             else:
                 st.error("❌ Unsupported file type")
                 return
-            
-            # Store file text for matching
             st.session_state.file_text = file_text
-    
-    # Text query section
     else:
-        # Text input for project description
         st.session_state.file_text = st.text_area(
             "Enter Project Description", 
             height=200, 
             placeholder="Describe your project, required skills, and expectations..."
         )
-    
-    # Match button with improved styling
-    match_button = st.button("✨ Find Best Consultants")
-    
-    # Matching process
-    if match_button and st.session_state.file_text:
-        # Display file processing progress
+
+    if st.button("✨ Find Best Consultants") and st.session_state.file_text:
         with st.spinner('⚙️ Processing project document...'):
-            # Generate project summary
             st.session_state.project_summary = generate_project_summary(st.session_state.file_text)
-            st.subheader("📝 Project Summary")
+            st.subheader("🖋️ Project Summary")
             st.write(st.session_state.project_summary)
-        
-        # Get embeddings and consultant data
         embeddings = get_embeddings()
         consultant_df = load_consultant_data()
-        
         if consultant_df is not None:
-            # Create consultant vector store
             vector_store = create_consultant_vector_store(embeddings, consultant_df)
-            
-            # Find best matches
             if vector_store:
                 with st.spinner('🔍 Finding best consultant matches...'):
                     st.session_state.matches = find_best_consultant_matches(vector_store, st.session_state.project_summary)
-                
                 st.subheader("🎯 Best Matching Consultants")
                 if st.session_state.matches:
                     for i, consultant in enumerate(st.session_state.matches, 1):
                         st.markdown(f"### 👨‍💼 Consultant {i}")
                         for key, value in consultant.items():
-                            # Special handling for match analysis to make it more readable
                             if key == "Match Analysis":
                                 st.write(f"**{key}:**")
                                 st.markdown(value)
