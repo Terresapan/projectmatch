@@ -4,6 +4,7 @@ pandasql  # this is for example/st_app.py only
 st-gsheets-connection
 langchain-groq
 langchain
+langsmith
 langchain-openai
 langchain-community
 faiss-cpu

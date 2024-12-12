@@ -24,6 +24,11 @@ except ImportError:
 # Set API keys from Streamlit secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["general"]["OPENAI_API_KEY"]
 os.environ["GROQ_API_KEY"] = st.secrets["general"]["GROQ_API_KEY"]
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]["API_KEY"]
+os.environ["LANGCHAIN_ENDPOINT"]="https://api.smith.langchain.com"
+os.environ["LANGCHAIN_PROJECT"] = "Project-Consultant-Matcher"
+# --- Project Data ---
 
 # File processing functions
 def extract_text_from_pdf(file):
