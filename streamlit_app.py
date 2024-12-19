@@ -6,6 +6,7 @@ import re
 from langchain_groq import ChatGroq
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
+from langsmith import traceable
 
 # File processing libraries
 import PyPDF2
@@ -31,6 +32,7 @@ os.environ["LANGCHAIN_PROJECT"] = "Project-Consultant-Matcher"
 # --- Project Data ---
 
 # File processing functions
+@traceable()
 def extract_text_from_pdf(file):
     """Extract text from a PDF file"""
     try:
@@ -41,6 +43,7 @@ def extract_text_from_pdf(file):
         st.error(f"❌ Error reading PDF: {e}")
         return ""
 
+@traceable()
 def extract_text_from_docx(file):
     """Extract text from a Word document"""
     if not HAS_DOCX:
@@ -54,6 +57,7 @@ def extract_text_from_docx(file):
         st.error(f"❌ Error reading DOCX: {e}")
         return ""
 
+@traceable()
 def extract_text_from_txt(file):
     """Extract text from a text file"""
     try:
@@ -64,6 +68,9 @@ def extract_text_from_txt(file):
 
 # Initialize embeddings
 @st.cache_resource
+@traceable(
+    metadata={"embedding_model": "openai/text-embedding-3-small"},
+)
 def get_embeddings():
     return OpenAIEmbeddings(model="text-embedding-3-small")
 
@@ -80,6 +87,7 @@ def load_consultant_data():
         return None
 
 # Project summary function using AI
+@traceable()
 def generate_project_summary(text):
     """Generate structured project summary using AI"""
     text = re.sub(r'\s+', ' ', text).strip()
@@ -110,6 +118,9 @@ def generate_project_summary(text):
 
 # Create vector store for consultants
 @st.cache_resource
+@traceable(
+    metadata={"vectordb": "FAISS"}
+)
 def create_consultant_vector_store(_embeddings, df):
     if df is None or df.empty:
         st.error("❌ Consultant DataFrame is None or empty")
@@ -134,6 +145,7 @@ def create_consultant_vector_store(_embeddings, df):
         return None
 
 # Analyze consultant match with AI
+@traceable()
 def analyze_consultant_match(project_summary, consultant_details):
     """Generate detailed analysis of consultant match"""
     llm = ChatGroq(
@@ -163,6 +175,9 @@ Your analysis should be constructive, highlighting both positive aspects and are
         return "Unable to generate detailed match analysis."
 
 # Find best consultant matches
+@traceable(
+        run_type="retriever"
+)
 def find_best_consultant_matches(vector_store, project_summary, top_k=3):
     """Find the best consultant matches based on project summary"""
     if not vector_store:
@@ -190,6 +205,7 @@ def find_best_consultant_matches(vector_store, project_summary, top_k=3):
         return []
 
 # Main Streamlit app
+@traceable()
 def main():
     st.title("🤝 Project-Consultant Matcher")
     input_method = st.radio("Choose Input Method", ["📂 File Upload", "✍️ Text Query"], horizontal=True)
